@@ -6,7 +6,7 @@
 [![GitHub last commit](https://img.shields.io/github/last-commit/your-github-username/your-repo-name)](https://github.com/your-github-username/your-repo-name)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A repository containing all the R Markdown scripts for the analysis and results presented in my Ph.D. thesis.✅
+A repository containing all the R Markdown scripts for the analysis and results presented in my Ph.D. thesis. ✅
 
 ---
 
