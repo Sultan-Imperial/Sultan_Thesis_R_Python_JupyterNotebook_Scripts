@@ -1,8 +1,6 @@
-# Sultan_Thesis_R_Scriptss
+# 🎓 cfDNA Shallow WGS Copy Number Alterations and Fragmentomics as a Biomarker for Patients with Hepatocellular Carcinoma (HCC) 🎓
 
-# [cfDNA Shallow WGS Copy Number Alterations and Fragmentomics as a Biomarker for Patients with Hepatocellular Carcinoma (HCC)] 🚀
-
-## Author: [Sultan N. Alharbi]
+## Author: Sultan N. Alharbi
 
 [![ORCID](https://img.shields.io/badge/ORCID-your--orcid--id-brightgreen)](https://orcid.org/your-orcid-id)
 [![GitHub last commit](https://img.shields.io/github/last-commit/your-github-username/your-repo-name)](https://github.com/your-github-username/your-repo-name)
