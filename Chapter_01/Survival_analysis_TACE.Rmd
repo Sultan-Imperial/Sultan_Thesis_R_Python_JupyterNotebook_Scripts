@@ -1,0 +1,1678 @@
+---
+title: "Survival analysis in patients with HCC treated with TACE Subset Group (n=103)"
+author: "Sultan Alharbi"
+date: "`r Sys.Date()`"
+output:
+  UHHformats::html_material:
+    highlight: kate
+    code_folding: show
+    card: true
+  html_document:
+    df_print: paged
+    fig_caption: true
+    fig_height: 8
+    fig_width: 10
+    keep_md: true
+bibliography:
+- bib/references.bib
+- bib/packages.bib
+csl: "/Users/sultanalharbi/Library/CloudStorage/OneDrive-Personal/Projects/Thesis_Chapters/Chapter 1 (cfDNA-TACE for HCC)/TACE_Scripts/bib/sage-harvard.csl"
+logo: "/Users/sultanalharbi/Library/CloudStorage/OneDrive-Personal/Projects/Thesis_Chapters/Chapter 1 (cfDNA-TACE for HCC)/TACE_Scripts/Images/Liver Ink.png"
+editor_options:
+  chunk_output_type: inline
+---
+
+
+```{r setup, include=FALSE}
+# Load necessary libraries here, e.g., library(tidyverse)
+
+knitr::opts_chunk$set(
+  # Code display options
+  echo = TRUE,        # Display code chunks in the output
+  
+  # Caching options for speed
+  cache = TRUE,       # Cache chunk results to avoid re-running code
+  
+  # Suppress messages for a cleaner report
+  warning = FALSE,    # Don't show warnings in the final report
+  message = FALSE,    # Don't show messages in the final report
+  
+  # Figure options
+  fig.align = 'center', # Center-align all figures
+  fig.width = 10,       # Figure width in inches
+  fig.height = 8,       # Figure height in inches
+  dpi = 300,            # Figure resolution in DPI (dots per inch)
+  fig.retina = 2,       # Improve figure resolution for high-res (Retina) screens
+  dev = 'png',          # Graphics device (png, svg, pdf, etc.)
+  
+  # Output size option for better layout control
+  out.width = "80%"     # Set output width to 80% of the container
+)
+
+# also set theme options for plotting libraries like ggplot2
+# For example:
+ggplot2::theme_set(ggplot2::theme_minimal(base_size = 14))
+```
+
+
+# [) 🧬 Introduction to HCC and TACE-based treatment]{style="color:#000000; font-weight:bold;"} {.tabset .tabset-fade .tabset-pills}
+
+## [Project Overview]{style="color:#765543; font-weight:bold;"}
+
+::::: {.section-box .primary-box}
+::: {style="font-weight:bold; color:#1A4F8B; margin-bottom:5px;"}
+![](/Users/sultanalharbi/Library/CloudStorage/OneDrive-Personal/Projects/Thesis_Chapters/Chapter 1 (cfDNA-TACE for HCC)/TACE_Scripts/Images/TACE.gif){width="900px"}
+:::
+
+<div>
+
+This script serves as the analytical backbone of my PhD thesis, processing targeted-panel next-generation sequencing data from a cohort of hepatocellular carcinoma (HCC) patients who have undergone transarterial chemo-embolisation (TACE). Beginning with raw FASTQ files, the pipeline performs quality control, adapter trimming, and alignment to the GRCh38 reference genome, followed by rigorous post-alignment filtering to eliminate PCR duplicates and low-quality reads. Variant calling is executed. Subsequent annotation integrates multiple databases (COSMIC, ClinVar, gnomAD, OncoKB) to contextualise each variant’s clinical relevance and functional impact. The script then applies custom R functions to correlate molecular profiles with overall survival (OS) and pregression-free survival (PFS) after TACE. Interactive visualisations—waterfall plots, lollipop plots, and Kaplan-Meier curves—are automatically produced to facilitate rapid interpretation.
+
+</div>
+:::::
+
+## [Analysis Methods]{style="color:#765543; font-weight:bold;"}
+
+::::: {.section-box .secondary-box}
+::: {style="font-weight:bold; color:#2E7D32; margin-bottom:5px;"}
+Analysis Methods Overview
+:::
+
+<div>
+
+1️⃣  **End-point definition**
+
+• Overall survival (OS): time from first TACE session to death from any cause.
+
+• OS status is defined as 1 for death and 0 for alive at last follow-up.
+
+• Progression-free survival (PFS): time from first TACE session to radiological progression, or death, whichever occurs first.
+
+• PFS status is defined as 1 for progression or death and 0 for alive and/or progression-free at last follow-up.
+
+Patients alive and/or progression-free at last follow-up are right-censored.
+
+2️⃣ **Descriptive exploration**
+
+• Survival functions are estimated with Kaplan–Meier methodology, reporting median OS/PFS and their 95 % confidence intervals.        
+<div style="margin-left: 300px;">
+  `r knitr::include_graphics("/Users/sultanalharbi/Library/CloudStorage/OneDrive-Personal/Projects/Thesis_Chapters/Chapter 1 (cfDNA-TACE for HCC)/TACE_Scripts/Images/OS_PFS.gif")`
+</div>
+• Differences between strata (e.g., mutational status, BCLC stage, AFP level) are compared with the two-sided log-rank test.
+
+3️⃣ **Univariable risk assessment**
+
+• Cox proportional hazards (PH) models are fitted for each clinical, radiological, and molecular variable to assess their association with OS and PFS.
+
+• Hazard ratios (HRs) with 95 % confidence intervals (CIs) and Wald P-values are reported.
+
+4️⃣ **Multivariable modelling**
+
+• A multivariable Cox PH model is constructed to identify independent prognostic factors for OS and PFS.
+
+• Backward elimination (exit threshold P = 0.05) refines the model; stepwise selection and LASSO penalties are explored in sensitivity analyses to ensure robustness.
+
+5️⃣ **Software environment**
+
+• Analyses are executed in R (v4.4.2). Key packages: survival, survminer, rms, glmnet, mice, timeROC.
+
+</div>
+:::::
+
+
+# [) ⚙️ Data Preparation and Loading Packages]{style="color:#000000; font-weight:bold;"} {.tabset .tabset-fade}
+
+## [Load and Inspect Data]{style="color:#765543; font-weight:bold;"}
+
+```{r Load_Data, echo=TRUE, cache=TRUE}
+# Load the data
+Survival_R <- read.csv("/Users/sultanalharbi/Library/CloudStorage/OneDrive-Personal/Projects/Thesis_Chapters/Chapter 1 (cfDNA-TACE for HCC)/TACE_Tables/Final_PFS_OS_TACE.csv")
+
+# Create binary variables
+# cfDNA binary variable
+Survival_R$cfDNA <- ifelse(Survival_R$`cfDNA1.Result.ng.ml..pre.TACE.` < 544, 0, 1)
+
+# Tumour Size binary variable (< 5 vs >= 5 cm)
+Survival_R$Tumour_size <- ifelse(Survival_R$Tumour_size < 5, 0, 1)
+
+# AFP binary variable (< 400 vs >= 400)
+Survival_R$AFP_binary <- ifelse(Survival_R$AFP < 400, 0, 1)
+
+# Albumin binary variable (< 36 vs >= 36)
+Survival_R$Albumin_binary <- ifelse(Survival_R$Albumin < 36, 0, 1)
+
+# Bilirubin binary variable (< 11 vs >= 11)
+Survival_R$Bilirubin_binary <- ifelse(Survival_R$Bilirubin < 11, 0, 1)
+
+# Age binary variable (< 69 vs >= 69)
+Survival_R$Age_binary <- ifelse(Survival_R$Age < 69, 0, 1)
+
+# Print the summary of the data
+summary(Survival_R)
+```
+
+## [Install Necessary Packages]{style="color:#765543; font-weight:bold;"}
+
+```{r load-packages, echo=TRUE, cache=TRUE, include=TRUE}
+# Function to safely install and load packages
+install_and_load <- function(packages, bioconductor = FALSE) {
+  # Set a default CRAN mirror if not already set
+  if (is.null(getOption("repos")) || getOption("repos")["CRAN"] == "@CRAN@") {
+    options(repos = c(CRAN = "https://cran.r-project.org"))
+  }
+  
+  for (package in packages) {
+    # Check if package is installed
+    if (!requireNamespace(package, quietly = TRUE)) {
+      message(paste("Installing package:", package))
+      
+      # Install from appropriate source
+      if (bioconductor) {
+        if (!requireNamespace("BiocManager", quietly = TRUE)) {
+          install.packages("BiocManager")
+        }
+        BiocManager::install(package, update = FALSE, ask = FALSE)
+      } else {
+        install.packages(package)
+      }
+    }
+    
+    # Load package
+    suppressWarnings(suppressPackageStartupMessages(
+      library(package, character.only = TRUE)
+    ))
+  }
+}
+
+# --- Package Installation ---
+
+# 1. Install and load remotes package first, as it's needed for GitHub installations
+install_and_load("remotes")
+
+# 2. Install maftools from GitHub if needed
+if (!requireNamespace("maftools", quietly = TRUE)) {
+  message("Installing maftools from GitHub...")
+  remotes::install_github("PoisonAlien/maftools", quiet = TRUE)
+}
+suppressWarnings(suppressPackageStartupMessages(library(maftools)))
+
+
+# 3. Define CRAN and Bioconductor packages
+cran_packages <- c("survival", "lubridate", "ggfortify", "flexsurv", 
+                   "evaluate", "knitr", "dplyr", "ggplot2", "magrittr", "grid",
+                   "broom.helpers", "modelsummary", "kableExtra", "tinytex", "ggplotify")
+
+bioc_packages <- c("ggsurvfit", "gtsummary", "tidycmprsk", "ranger", 
+                   "survminer", "survcomp")
+
+# 4. Install and load packages from CRAN and Bioconductor
+install_and_load(cran_packages)
+install_and_load(bioc_packages, bioconductor = TRUE)
+
+# 5. Install TinyTeX for PDF generation if not already installed
+if (!requireNamespace("tinytex", quietly = TRUE)) {
+  install.packages("tinytex")
+}
+if (!tinytex::is_tinytex()) {
+  tinytex::install_tinytex()
+}
+
+# 6. Install UHHformats from the correct GitHub repository
+# The repository path has been corrected thanks to your input.
+if (!requireNamespace("UHHformats", quietly = TRUE)) {
+  message("Installing UHHformats from GitHub (uham-bio/UHHformats)...")
+  # Using the correct repository. build_vignettes = FALSE for faster, non-interactive installation.
+  remotes::install_github("uham-bio/UHHformats", quiet = TRUE, build_vignettes = FALSE)
+}
+
+# 7. Load UHHformats
+# With the correct installation source, we can simplify the loading logic.
+if (requireNamespace("UHHformats", quietly = TRUE)) {
+    suppressWarnings(suppressPackageStartupMessages(library(UHHformats)))
+} else {
+    warning("UHHformats package could not be installed or loaded.")
+}
+
+
+# --- Bibliography Generation ---
+
+# Create bibliography directory if it doesn't exist
+if (!dir.exists("bib")) {
+  dir.create("bib")
+}
+
+# Generate package references for all loaded packages and essential rendering packages
+# Start with the list of currently loaded packages
+all_packages <- unique(.packages())
+
+# Add essential packages for rendering the document that might not be attached
+all_packages <- unique(c(all_packages, 'rmarkdown', 'knitr'))
+
+# Add UHHformats to the bibliography list ONLY if it is currently loaded
+if ("UHHformats" %in% .packages()) {
+  all_packages <- unique(c(all_packages, 'UHHformats'))
+}
+
+# Write the .bib file
+message("Writing bibliography file to bib/packages.bib...")
+knitr::write_bib(x = all_packages, file = 'bib/packages.bib')
+
+message("Package setup complete.")
+
+```
+
+## [Helper Functions]{style="color:#765543; font-weight:bold;"}
+
+```{r Helper_Functions, echo=TRUE, cache=TRUE}
+############################################################
+# Function to create survival plots with annotations for whole cohort
+############################################################
+create_whole_cohort_survival_plot <- function(surv_fit, title, time_col, status_col, ylab, annotation_x, annotation_y) {
+  # Get median survival and CI
+  median_surv <- surv_median(surv_fit)
+  
+  # Create the survival plot
+  surv_plot <- ggsurvplot(surv_fit,
+                         conf.int = TRUE,
+                         pval = FALSE,
+                         pval.method = FALSE,
+                         risk.table = TRUE,
+                         surv.median.line = "hv",
+                         legend.title = title,
+                         xlab = "Time, months",
+                         ylab = ylab,
+                         palette = "blue",
+                         ggtheme = theme_bw(base_size = 18),
+                         font.x = c(18, "bold", "black"),
+                         font.y = c(18, "bold", "black"),
+                         font.tickslab = c(16, "plain", "black"),
+                         font.legend = c(18, "plain", "black"),
+                         tables.theme = theme_survminer(font.size = 14))  # Single color for whole cohort
+  
+  # Create label text
+  label_text <- sprintf("Median %s: %.2f months\n95%% CI: %.2f - %s", 
+                       ylab, median_surv$median[1], median_surv$lower[1], 
+                       if(is.na(median_surv$upper[1])) "NA" else sprintf("%.2f", median_surv$upper[1]))
+  
+  # Add annotation
+  surv_plot$plot <- surv_plot$plot +
+    annotate("label", x = annotation_x, y = annotation_y, label = label_text,
+             size = 6, hjust = 0, vjust = 1, color = "black", fill = "lightblue")
+  
+  return(surv_plot)
+}
+
+############################################################
+# Function to create survival plots for three groups (A, B, C)
+############################################################
+create_survival_plot <- function(surv_fit, title, column_name, median_surv, time_col, status_col, ylab, annotation_x, annotation_y1, annotation_y2, annotation_y3, pval_y) {
+  # Perform the log-rank test to get the p-value
+  formula <- as.formula(paste("Surv(", time_col, ",", status_col, ") ~", column_name))
+  logrank_test <- survdiff(formula, data = Survival_R)
+  p_value <- 1 - pchisq(logrank_test$chisq, df = length(unique(Survival_R[[column_name]])) - 1)
+  
+  # Create the survival plot
+  surv_plot <- ggsurvplot(surv_fit,
+                          conf.int = FALSE,
+                          pval = FALSE,
+                          pval.method = FALSE,
+                          risk.table = TRUE,
+                          surv.median.line = "hv",
+                          legend.labs = c("A", "B", "C"),
+                          legend.title = title,
+                          xlab = "Time, months",
+                          ylab = ylab,
+                          palette = c("#00BA38", "#619CFF", "#F8766D"), # Set green, blue, red for A, B, C
+                          ggtheme = theme_bw(base_size = 16),
+                          font.x = c(16, "bold", "black"),
+                          font.y = c(16, "bold", "black"),
+                          font.tickslab = c(16, "plain", "black"),
+                          font.legend = c(16, "plain", "black"),
+                          tables.theme = theme_survminer(font.size = 14)
+                          )
+  # Create label texts
+  label_A <- sprintf("Class A \nMedian %s: %.2f months\n95%% CI: %.2f - %s", 
+                    ylab, median_surv$median[1], median_surv$lower[1], 
+                    if(is.na(median_surv$upper[1])) "NA" else sprintf("%.2f", median_surv$upper[1]))
+  
+  label_B <- sprintf("Class B \nMedian %s: %.2f months\n95%% CI: %.2f - %s", 
+                    ylab, median_surv$median[2], median_surv$lower[2], 
+                    if(is.na(median_surv$upper[2])) "NA" else sprintf("%.2f", median_surv$upper[2]))
+  
+  label_C <- sprintf("Class C \nMedian %s: %.2f months\n95%% CI: %.2f - %s", 
+                    ylab, median_surv$median[3], median_surv$lower[3], 
+                    if(is.na(median_surv$upper[3])) "NA" else sprintf("%.2f", median_surv$upper[3]))
+  
+  # Add annotations with matching colors
+  surv_plot$plot <- surv_plot$plot +
+    annotate("label", x = annotation_x, y = annotation_y1, label = label_A,
+             size = 5, hjust = 0, vjust = 1, color = "black", fill = "#00BA38") +  # Green for Class A
+    annotate("label", x = annotation_x, y = annotation_y2, label = label_B,
+             size = 5, hjust = 0, vjust = 1, color = "black", fill = "#619CFF") +  # Blue for Class B
+    annotate("label", x = annotation_x, y = annotation_y3, label = label_C,
+             size = 5, hjust = 0, vjust = 1, color = "black", fill = "#F8766D") +  # Red for Class C
+    annotate("text", x = annotation_x, y = pval_y, 
+             label = sprintf("Log-rank p-value: %.4f", p_value),
+             size = 5, hjust = 0, vjust = 1, color = "black")
+  
+  return(surv_plot)
+}
+
+############################################################
+# Function to create survival plots for two groups (A, B)
+############################################################
+create_survival_plot_two_groups <- function(surv_fit, title, column_name, median_surv, time_col, status_col, ylab, annotation_x, annotation_y1, annotation_y2, pval_y) {
+  # Perform the log-rank test to get the p-value
+  formula <- as.formula(paste("Surv(", time_col, ",", status_col, ") ~", column_name))
+  logrank_test <- survdiff(formula, data = Survival_R)
+  p_value <- 1 - pchisq(logrank_test$chisq, df = 1)
+  
+  # Create the survival plot
+  surv_plot <- ggsurvplot(surv_fit,
+                          conf.int = FALSE,
+                          pval = FALSE,
+                          pval.method = FALSE,
+                          risk.table = TRUE,
+                          surv.median.line = "hv",
+                          legend.labs = c("A", "B"),
+                          legend.title = title,
+                          xlab = "Time, months",
+                          ylab = ylab,
+                          palette = c("#00BA38", "#619CFF"))  # Set green, blue for A, B
+  
+  # Create label texts
+  label_A <- sprintf("Class A \nMedian %s: %.2f months\n95%% CI: %.2f - %s", 
+                    ylab, median_surv$median[1], median_surv$lower[1], 
+                    if(is.na(median_surv$upper[1])) "NA" else sprintf("%.2f", median_surv$upper[1]))
+  
+  label_B <- sprintf("Class B \nMedian %s: %.2f months\n95%% CI: %.2f - %s", 
+                    ylab, median_surv$median[2], median_surv$lower[2], 
+                    if(is.na(median_surv$upper[2])) "NA" else sprintf("%.2f", median_surv$upper[2]))
+  
+  # Add annotations with matching colors
+  surv_plot$plot <- surv_plot$plot +
+    annotate("label", x = annotation_x, y = annotation_y1, label = label_A,
+             size = 4, hjust = 0, vjust = 1, color = "black", fill = "#00BA38") +  # Green for Class A
+    annotate("label", x = annotation_x, y = annotation_y2, label = label_B,
+             size = 4, hjust = 0, vjust = 1, color = "black", fill = "#619CFF") +  # Blue for Class B
+    annotate("text", x = annotation_x, y = pval_y, 
+             label = sprintf("Log-rank p-value: %.4f", p_value),
+             size = 4, hjust = 0, vjust = 1, color = "black")
+  
+  return(surv_plot)
+}
+
+############################################################
+# Function to create survival plots for binary variables (0/1)
+############################################################
+create_survival_plot_binary <- function(surv_fit, title, column_name, median_surv, time_col, status_col, ylab, annotation_x, annotation_y1, annotation_y2, pval_y, label0, label1) {
+  # Perform the log-rank test to get the p-value
+  formula <- as.formula(paste("Surv(", time_col, ",", status_col, ") ~", column_name))
+  logrank_test <- survdiff(formula, data = Survival_R)
+  p_value <- 1 - pchisq(logrank_test$chisq, df = 1)
+  
+  # Create the survival plot
+  surv_plot <- ggsurvplot(surv_fit,
+                          conf.int = FALSE,
+                          pval = FALSE,
+                          pval.method = FALSE,
+                          risk.table = TRUE,
+                          surv.median.line = "hv",
+                          legend.labs = c(label0, label1),  # Use custom labels instead of 0, 1
+                          legend.title = title,
+                          xlab = "Time, months",
+                          ylab = ylab,
+                          palette = c("#00BA38", "#619CFF"),
+                          ggtheme = theme_bw(base_size = 18),
+                          font.x = c(18, "bold", "black"),
+                          font.y = c(18, "bold", "black"),
+                          font.tickslab = c(16, "plain", "black"),
+                          font.legend = c(18, "plain", "black"),
+                          tables.theme = theme_survminer(font.size = 14)
+                          )
+  
+  # Create label texts
+  label_0 <- sprintf("%s \nMedian %s: %.2f months\n95%% CI: %.2f - %s", 
+                    label0, ylab, median_surv$median[1], median_surv$lower[1], 
+                    if(is.na(median_surv$upper[1])) "NA" else sprintf("%.2f", median_surv$upper[1]))
+  
+  label_1 <- sprintf("%s \nMedian %s: %.2f months\n95%% CI: %.2f - %s", 
+                    label1, ylab, median_surv$median[2], median_surv$lower[2], 
+                    if(is.na(median_surv$upper[2])) "NA" else sprintf("%.2f", median_surv$upper[2]))
+  
+  # Add annotations with matching colors
+  surv_plot$plot <- surv_plot$plot +
+    annotate("label", x = annotation_x, y = annotation_y1, label = label_0,
+             size = 4, hjust = 0, vjust = 1, color = "black", fill = "#00BA38") +  # Green for value 0
+    annotate("label", x = annotation_x, y = annotation_y2, label = label_1,
+             size = 4, hjust = 0, vjust = 1, color = "black", fill = "#619CFF") +  # Blue for value 1
+    annotate("text", x = annotation_x, y = pval_y, 
+             label = sprintf("Log-rank p-value: %.4f", p_value),
+             size = 4, hjust = 0, vjust = 1, color = "black")
+  
+  return(surv_plot)
+}
+
+############################################################
+# Function to create survival plots for HAP (A, B, C, D)
+############################################################
+create_survival_plot_HAP <- function(surv_fit, title, column_name, median_surv, time_col, status_col, ylab, annotation_x, annotation_y1, annotation_y2, annotation_y3, annotation_y4, pval_y) {
+  # Perform the log-rank test to get the p-value
+  formula <- as.formula(paste("Surv(", time_col, ",", status_col, ") ~", column_name))
+  logrank_test <- survdiff(formula, data = Survival_R)
+  p_value <- 1 - pchisq(logrank_test$chisq, df = length(levels(factor(Survival_R[[column_name]]))) - 1)
+  
+  # Create the survival plot
+  surv_plot <- ggsurvplot(surv_fit,
+                          conf.int = FALSE,
+                          pval = FALSE,
+                          pval.method = FALSE,
+                          risk.table = TRUE,
+                          surv.median.line = "hv",
+                          legend.labs = c("A", "B", "C", "D"),  # Use A, B, C, D for HAP
+                          legend.title = title,
+                          xlab = "Time, months",
+                          ylab = ylab,
+                          palette = c("#00BA38", "#619CFF", "#F8766D", "#9467BD"),
+                          ggtheme = theme_bw(base_size = 10),
+                          font.x = c(15, "bold", "black"),
+                          font.y = c(15, "bold", "black"),
+                          font.tickslab = c(16, "plain", "black"),
+                          font.legend = c(15, "plain", "black"),
+                          tables.theme = theme_survminer(font.size = 12)
+                          )
+  
+  # Create label texts
+  label_A <- sprintf("HAP A \nMedian %s: %.2f months\n95%% CI: %.2f - %s", 
+                    ylab, median_surv$median[1], median_surv$lower[1], 
+                    if(is.na(median_surv$upper[1])) "NA" else sprintf("%.2f", median_surv$upper[1]))
+  
+  label_B <- sprintf("HAP B \nMedian %s: %.2f months\n95%% CI: %.2f - %s", 
+                    ylab, median_surv$median[2], median_surv$lower[2], 
+                    if(is.na(median_surv$upper[2])) "NA" else sprintf("%.2f", median_surv$upper[2]))
+  
+  label_C <- sprintf("HAP C \nMedian %s: %.2f months\n95%% CI: %.2f - %s", 
+                    ylab, median_surv$median[3], median_surv$lower[3], 
+                    if(is.na(median_surv$upper[3])) "NA" else sprintf("%.2f", median_surv$upper[3]))
+  
+  label_D <- sprintf("HAP D \nMedian %s: %.2f months\n95%% CI: %.2f - %s", 
+                    ylab, median_surv$median[4], median_surv$lower[4], 
+                    if(is.na(median_surv$upper[4])) "NA" else sprintf("%.2f", median_surv$upper[4]))
+  
+  # Add annotations with matching colors
+  surv_plot$plot <- surv_plot$plot +
+    annotate("label", x = annotation_x, y = annotation_y1, label = label_A,
+             size = 4, hjust = 0, vjust = 1, color = "black", fill = "#00BA38") +  # Green for HAP A
+    annotate("label", x = annotation_x, y = annotation_y2, label = label_B,
+             size = 4, hjust = 0, vjust = 1, color = "black", fill = "#619CFF") +  # Blue for HAP B
+    annotate("label", x = annotation_x, y = annotation_y3, label = label_C,
+             size = 4, hjust = 0, vjust = 1, color = "black", fill = "#F8766D") +  # Red for HAP C
+    annotate("label", x = annotation_x, y = annotation_y4, label = label_D,
+             size = 4, hjust = 0, vjust = 1, color = "black", fill = "#9467BD") +  # Purple for HAP D
+    annotate("text", x = annotation_x, y = pval_y, 
+             label = sprintf("Log-rank p-value: %.4f", p_value),
+             size = 4, hjust = 0, vjust = 2, color = "black")
+  
+  return(surv_plot)
+}
+```
+
+
+
+# [) 📉 Kaplan-Meier Survival Results]{style="color:#000000; font-weight:bold;"} {.tabset .tabset-fade .tabset-pills}
+
+## [Whole Cohort Analysis]{style="color:#765543; font-weight:bold;"} {.tabset}
+
+### [Overall Survival (OS)]{style="color:#51366a; font-weight:bold;"}
+
+```{r OS_Whole_Cohort, echo=TRUE, cache=TRUE}
+# OS Analysis for Whole Cohort
+Whole_Cohort_OS <- survfit(Surv(OS_Time, OS_Status) ~ 1, data = Survival_R)
+Whole_OS_plot <- create_whole_cohort_survival_plot(Whole_Cohort_OS, "Strata", 
+                                                  "OS_Time", "OS_Status", 
+                                                  "OS Probability", 60, 0.75)
+
+# Display plot
+print(Whole_OS_plot)
+
+# Save plot
+png("/Users/sultanalharbi/Library/CloudStorage/OneDrive-Personal/Projects/Thesis_Chapters/Chapter 1 (cfDNA-TACE for HCC)/TACE_Results/Whole_Cohort_OS_TACE.png", width = 10, height = 8, units = "in", res = 300)
+print(Whole_OS_plot)
+dev.off()
+```
+
+::::: {.section-box .primary-box}
+::: {style="font-weight:bold; color:#1A4F8B; margin-bottom:5px;"}
+:::
+
+<div>
+
+**The median Overall Survival (OS)** for the whole cohort is **34.30 months (~ 3 years)**, but this figure on its own is only a point estimate derived from this specific sample of patients. To better understand the true prognosis for the entire population of similar patients, we look at **the 95% Confidence Interval (CI)**, which ranges **from 27.80 to 41.30 months**. This interval provides a plausible range for the true population median, indicating that while our best estimate is **34.3 months**, we can be 95% confident that the true median OS for this HCC cohort lies somewhere between approximately 28 to 41 months. The "95% confidence" itself is a statement about the reliability of the estimation procedure, suggesting that if this study were repeated many times, 95% of the resulting CIs would capture the actual median OS of the population. The breadth of this interval also gives us insight into the precision of our estimate; a wider range may reflect greater variability in the data or a smaller sample size, thus providing a more complete and realistic picture of the expected outcomes than the single median value alone.
+
+</div>
+:::::
+
+### [Progression-Free Survival (PFS)]{style="color:#51366a; font-weight:bold;"}
+
+```{r PFS_Whole_Cohort, echo=TRUE, cache=TRUE}
+# PFS Analysis for Whole Cohort
+Whole_Cohort_PFS <- survfit(Surv(PFS_Time, PFS_Status) ~ 1, data = Survival_R)
+Whole_PFS_plot <- create_whole_cohort_survival_plot(Whole_Cohort_PFS, "Strata", 
+                                                   "PFS_Time", "PFS_Status", 
+                                                   "PFS Probability", 29, 0.75)
+
+# Display plot
+print(Whole_PFS_plot)
+
+# Save plot
+png("/Users/sultanalharbi/Library/CloudStorage/OneDrive-Personal/Projects/Thesis_Chapters/Chapter 1 (cfDNA-TACE for HCC)/TACE_Results/Whole_Cohort_PFS_TACE.png", width = 10, height = 8, units = "in", res = 300)
+print(Whole_PFS_plot)
+dev.off()
+```
+
+::::: {.section-box .primary-box}
+
+::: {style="font-weight:bold; color:red; margin-bottom:5px;"}
+How effective is TACE for treating HCC patients?
+:::
+
+::: {style="font-weight:bold; color:green; margin-bottom:5px;"}
+This plot shows us how long HCC patients live without their cancer getting worse after TACE treatment.
+PFS measures the time from the start of treatment (TACE) until one of the following events occurs:
+
+A) The HCC shows signs of progression (e.g., tumors grow in size or new tumors appear).
+B) The patient dies from any cause.
+
+This plot tracks the PFS for a cohort of 103 patients over a 60-month (5-year) period.
+:::
+
+**Results Interpretation**
+
+The median Progression-Free Survival (PFS) for the entire patient cohort was **12.43 months** (approximately more than 1 years), with a 95% confidence interval (CI) of 10.03 to 18.47 months. This indicates a 95% probability that the true median PFS for this cohort of HCC patients lies between approximately 10 and 18 months.
+
+<span style="color:#6638f0; font-weight:bold;">The central finding here:</span> is the median PFS of **12.43 months**. This means that after TACE treatment, half of the patients lived for approximately <span style="color:#049840; font-weight:bold;">**one year**</span> before their disease progressed. The dashed lines clearly illustrate how this point is determined, linking the 50% probability mark to the corresponding time.
+
+**Confidence Interval (CI) Explained:**
+
+The 95% CI provides a range of plausible values for the median PFS. In this case, we can be 95% confident that the actual median PFS for the population from which this sample was drawn falls between 10 and 18 months. The width of this interval also gives an indication of the precision of the estimate; a narrower interval would suggest a more precise estimate.
+:::::
+
+
+## [BCLC Stage Analysis]{style="color:#765543; font-weight:bold;"} {.tabset}
+
+### [Overall Survival by BCLC Stage]{style="color:#51366a; font-weight:bold;"}
+
+```{r OS_BCLC, echo=TRUE, cache=TRUE}
+# OS Analysis by BCLC Stage
+BCLC_OS <- survfit(Surv(OS_Time, OS_Status) ~ BCLC, data = Survival_R)
+median_os <- surv_median(BCLC_OS)
+
+BCLC_OS_plot <- create_survival_plot(BCLC_OS, "BCLC", "BCLC", median_os, "OS_Time", "OS_Status", 
+                                    "OS Probability", 74, 1, 0.79, 0.58, 0.37)
+
+# Display plot
+print(BCLC_OS_plot)
+
+# Save plot
+png("/Users/sultanalharbi/Library/CloudStorage/OneDrive-Personal/Projects/Thesis_Chapters/Chapter 1 (cfDNA-TACE for HCC)/TACE_Results/BCLC_OS_TACE.png", width = 10, height = 8, units = "in", res = 300)
+print(BCLC_OS_plot)
+dev.off()
+```
+
+::::: {.section-box .primary-box}
+
+<div style="display: flex; justify-content: center; gap: 20px; margin-bottom:10px;">
+<div style="text-align: center;">
+<img src="/Users/sultanalharbi/Library/CloudStorage/OneDrive-Personal/Projects/Thesis_Chapters/Chapter 1 (cfDNA-TACE for HCC)/TACE_Scripts/Images/BCLC2.png" width="400px" height="400px" alt="BCLC Stage 2">
+<p><em>Figure 1</em></p>
+</div>
+</div>
+
+::: {style="font-weight:bold; color:red; margin-bottom:5px;"}
+How can BCLC effect TACE efficacy?
+:::
+
+::: {style="font-weight:bold; color:green; margin-bottom:5px;"}
+BCLC is a standard system that classifies HCC based on:
+
+1️⃣ Tumor characteristics.
+
+2️⃣ Liver function.
+
+3️⃣ Patient health.
+
+with Class A being early-stage, B being intermediate, and C being advanced-stage of HCC.
+:::
+
+**Results Interpretation**
+
+**Overall Survival (OS) by BCLC Class**
+This plot shows the probability of patients being alive over a 10-year period, grouped by their cancer stage at the start of the study.
+
+<span style="color:#5cc9f5; font-weight:bold;">**Key Findings:**</span>
+
+
+<span style="color:#028236; font-weight:bold;">**Class A:**</span> This early-stage group has the best prognosis. The median OS is 60.73 months (about 5 years). The confidence interval is "NA" (Not Available/Not Applicable) on the upper end because fewer than 50% of the patients in this group had died by the end of the follow-up period, which is a very positive sign ✅.
+
+
+<span style="color:#0843A9; font-weight:bold;">**Class  B:**</span>& <span style="color:#A90813; font-weight:bold;">**Class  C:**</span> These intermediate (B) and advanced-stage (C) groups have much shorter survival. Their median OS is 30.80 months and 33.27 months, respectively.
+
+**The Log-Rank p-value:** This is a crucial piece of information. The p-value of 0.2425 tests the hypothesis that there is no difference in survival among the three groups. Since this value is much greater than the standard significance threshold of 0.05, it means that the observed differences in Overall Survival between Classes A, B, and C are **NOT** statistically significant.
+
+**Clinical Interpretation:**
+While Class A patients visually appear to do better, the statistical test tells us we cannot confidently conclude that BCLC stage was a predictor of overall lifespan in this specific patient cohort. The crossing curves of Class B and C and the lack of statistical significance suggest that other factors—most likely the type and success of treatments received after the initial TACE—played a major role in determining a patient's final survival time.
+
+:::::
+
+
+
+
+### [Progression-Free Survival by BCLC Stage]{style="color:#51366a; font-weight:bold;"}
+
+```{r PFS_BCLC, echo=TRUE, cache=TRUE}
+# PFS Analysis by BCLC Stage
+BCLC_PFS <- survfit(Surv(PFS_Time, PFS_Status) ~ BCLC, data = Survival_R)
+median_pfs <- surv_median(BCLC_PFS)
+
+BCLC_PFS_plot <- create_survival_plot(BCLC_PFS, "BCLC", "BCLC", median_pfs, "PFS_Time", "PFS_Status", 
+                                     "PFS Probability", 36, 1, 0.79, 0.58, 0.37)
+
+# Display plot
+print(BCLC_PFS_plot)
+
+# Save plot
+png("/Users/sultanalharbi/Library/CloudStorage/OneDrive-Personal/Projects/Thesis_Chapters/Chapter 1 (cfDNA-TACE for HCC)/TACE_Results/BCLC_PFS_TACE.png", width = 10, height = 8, units = "in", res = 300)
+print(BCLC_PFS_plot)
+dev.off()
+```
+
+
+::::: {.section-box .primary-box}
+
+
+
+::: {style="font-weight:bold; color:red; margin-bottom:5px;"}
+How can different BCLC stages effect TACE efficacy?
+:::
+
+::: {style="font-weight:bold; color:green; margin-bottom:5px;"}
+This plot shows the probability of patients being alive and their cancer not having progressed, grouped by their initial BCLC stage. This is a measure of how long the initial treatment (like TACE) remains effective.
+:::
+<span style="color:#5cc9f5; font-weight:bold;">**Key Findings:**</span>
+
+::: {style="font-weight:bold; color:black; margin-bottom:5px;"}
+Clear Separation of Curves: Unlike the OS plot, these curves are cleanly separated in the clinically expected order.
+<span style="color:#028236; font-weight:bold;">**Class A:**</span> Has the longest period of disease control, with a median PFS of 21.30 months .
+<span style="color:#0843A9; font-weight:bold;">**Class  B:**</span> Has an intermediate median PFS of 11.53 months.
+<span style="color:#A90813; font-weight:bold;">**Class  C:**</span> Has the shortest period of disease control, with a median PFS of only 5.83 months.
+
+
+**The Log-Rank p-value:** Here, the p-value is ***0.0128***. Since this value is less than 0.05, it means there is a statistically significant difference in Progression-Free Survival among the three BCLC classes.
+
+The PFS data clearly and significantly (p=0.0128) demonstrates that BCLC staging is a **prognostic indicator 🔍** for tumour (HCC) control following TACE.
+:::
+
+
+
+<span style="color:#0516D3; font-weight:bold;">**Clinical Interpretation:**</span>
+
+This result is very clear: BCLC stage is an excellent predictor of how long a patient's cancer will remain stable after initial therapy. Patients with earlier-stage disease derive a much longer benefit from treatment before their cancer begins to grow again.
+
+<span style="color:#909703; font-weight:bold;">**The Complete Story Comparing the two plots tells a powerful story:**</span>
+
+PFS shows the effect of initial treatment: The PFS plot clearly and significantly shows that the initial BCLC stage dictates how long a therapy like TACE can control the cancer. Earlier stage (A) means longer control; advanced stage (C) means shorter control.
+OS shows the effect of all subsequent treatments: The OS plot is "messier" and not statistically significant. This strongly suggests that what happens after a patient's cancer first progresses is critical to their ultimate survival. A patient in Class C might progress quickly (short PFS) but then receive an effective second-line therapy (like immunotherapy or TKI) that extends their life significantly, allowing them to live as long as, or even longer than, some patients who started in Class B.
+In conclusion, BCLC stage is a robust tool for predicting the duration of disease control (PFS), but its ability to predict overall lifespan (OS) can be blurred by the complex, multi-step treatment journey of modern cancer care.
+:::::
+
+
+
+
+
+
+
+
+
+## [CTP Class Analysis]{style="color:#765543; font-weight:bold;"} {.tabset}
+
+### [Overall Survival by CTP Class]{style="color:#51366a; font-weight:bold;"}
+
+```{r OS_CTP, echo=TRUE, cache=TRUE}
+# OS Analysis by CTP class
+CTP_OS <- survfit(Surv(OS_Time, OS_Status) ~ CTP, data = Survival_R)
+median_os <- surv_median(CTP_OS)
+
+CTP_OS_plot <- create_survival_plot_two_groups(CTP_OS, "CTP", "CTP", median_os, "OS_Time", "OS_Status", 
+                                   "OS Probability", 80, 0.95, 0.75, 0.55)
+
+# Display plot
+print(CTP_OS_plot)
+
+# Save plot
+png("/Users/sultanalharbi/Library/CloudStorage/OneDrive-Personal/Projects/Thesis_Chapters/Chapter 1 (cfDNA-TACE for HCC)/TACE_Results/CTP_OS_TACE.png", width = 10, height = 8, units = "in", res = 300)
+print(CTP_OS_plot)
+dev.off()
+```
+
+### [Progression-Free Survival by CTP Class]{style="color:#51366a; font-weight:bold;"}
+
+```{r PFS_CTP, echo=TRUE, cache=TRUE}
+# PFS Analysis by CTP class
+CTP_PFS <- survfit(Surv(PFS_Time, PFS_Status) ~ CTP, data = Survival_R)
+median_pfs <- surv_median(CTP_PFS)
+
+CTP_PFS_plot <- create_survival_plot_two_groups(CTP_PFS, "CTP", "CTP", median_pfs, "PFS_Time", "PFS_Status", 
+                                    "PFS Probability", 40, 0.97, 0.77, 0.57)
+
+# Display plot
+print(CTP_PFS_plot)
+
+# Save plot
+png("/Users/sultanalharbi/Library/CloudStorage/OneDrive-Personal/Projects/Thesis_Chapters/Chapter 1 (cfDNA-TACE for HCC)/TACE_Results/CTP_PFS_TACE.png", width = 10, height = 8, units = "in", res = 300)
+print(CTP_PFS_plot)
+dev.off()
+```
+
+## [ECOG-PS Analysis]{style="color:#765543; font-weight:bold;"} {.tabset}
+
+### [Overall Survival by PS]{style="color:#51366a; font-weight:bold;"}
+
+```{r OS_PS, echo=TRUE, cache=TRUE}
+# OS Analysis by PS
+PS_OS <- survfit(Surv(OS_Time, OS_Status) ~ PS, data = Survival_R)
+median_os <- surv_median(PS_OS)
+
+PS_OS_plot <- create_survival_plot_binary(PS_OS, "Performance Status", "PS", median_os, "OS_Time", "OS_Status", 
+                                  "OS Probability", 80, 0.95, 0.75, 0.55, "PS 0", "PS 1")
+
+# Display plot
+print(PS_OS_plot)
+
+# Save plot
+png("/Users/sultanalharbi/Library/CloudStorage/OneDrive-Personal/Projects/Thesis_Chapters/Chapter 1 (cfDNA-TACE for HCC)/TACE_Results/PS_OS_TACE.png", width = 10, height = 8, units = "in", res = 300)
+print(PS_OS_plot)
+dev.off()
+```
+
+### [Progression-Free Survival by PS]{style="color:#51366a; font-weight:bold;"}
+
+```{r PFS_PS, echo=TRUE, cache=TRUE}
+# PFS Analysis by PS
+PS_PFS <- survfit(Surv(PFS_Time, PFS_Status) ~ PS, data = Survival_R)
+median_pfs <- surv_median(PS_PFS)
+
+PS_PFS_plot <- create_survival_plot_binary(PS_PFS, "Performance Status", "PS", median_pfs, "PFS_Time", "PFS_Status", 
+                                   "PFS Probability", 40, 0.97, 0.77, 0.57, "PS 0", "PS 1")
+
+# Display plot
+print(PS_PFS_plot)
+
+# Save plot
+png("/Users/sultanalharbi/Library/CloudStorage/OneDrive-Personal/Projects/Thesis_Chapters/Chapter 1 (cfDNA-TACE for HCC)/TACE_Results/PS_PFS_TACE.png", width = 10, height = 8, units = "in", res = 300)
+print(PS_PFS_plot)
+dev.off()
+```
+
+## [HAP Class Analysis]{style="color:#765543; font-weight:bold;"} {.tabset}
+
+### [Overall Survival by HAP Class]{style="color:#51366a; font-weight:bold;"}
+
+```{r OS_HAP, echo=TRUE, cache=TRUE}
+# OS Analysis by HAP
+HAP_OS <- survfit(Surv(OS_Time, OS_Status) ~ HAP, data = Survival_R)
+median_os <- surv_median(HAP_OS)
+
+HAP_OS_plot <- create_survival_plot_HAP(HAP_OS, "HAP", "HAP", median_os, "OS_Time", "OS_Status", 
+                                   "OS Probability", 80, 1, 0.83, 0.66, 0.49, 0.35)
+
+# Display plot
+print(HAP_OS_plot)
+
+# Save plot
+png("/Users/sultanalharbi/Library/CloudStorage/OneDrive-Personal/Projects/Thesis_Chapters/Chapter 1 (cfDNA-TACE for HCC)/TACE_Results/HAP_OS_TACE.png", width = 10, height = 8, units = "in", res = 300)
+print(HAP_OS_plot)
+dev.off()
+```
+
+### [Progression-Free Survival by HAP Class]{style="color:#51366a; font-weight:bold;"}
+
+```{r PFS_HAP, echo=TRUE, cache=TRUE}
+# PFS Analysis by HAP
+HAP_PFS <- survfit(Surv(PFS_Time, PFS_Status) ~ HAP, data = Survival_R)
+median_pfs <- surv_median(HAP_PFS)
+
+HAP_PFS_plot <- create_survival_plot_HAP(HAP_PFS, "HAP", "HAP", median_pfs, "PFS_Time", "PFS_Status", 
+                                    "PFS Probability", 40, 1, 0.83, 0.66, 0.49, 0.35)
+
+# Display plot
+print(HAP_PFS_plot)
+
+# Save plot
+png("/Users/sultanalharbi/Library/CloudStorage/OneDrive-Personal/Projects/Thesis_Chapters/Chapter 1 (cfDNA-TACE for HCC)/TACE_Results/HAP_PFS_TACE.png", width = 10, height = 8, units = "in", res = 300)
+print(HAP_PFS_plot)
+dev.off()
+```
+
+## [Cirrhosis Analysis]{style="color:#765543; font-weight:bold;"} {.tabset}
+
+### [Overall Survival by Cirrhosis]{style="color:#51366a; font-weight:bold;"}
+
+```{r OS_Cirrhosis, echo=TRUE, cache=TRUE}
+# OS Analysis by Cirrhosis
+Cirrhosis_OS <- survfit(Surv(OS_Time, OS_Status) ~ Cirrhosis, data = Survival_R)
+median_os <- surv_median(Cirrhosis_OS)
+
+Cirrhosis_OS_plot <- create_survival_plot_binary(Cirrhosis_OS, "Cirrhosis", "Cirrhosis", median_os, "OS_Time", "OS_Status", 
+                                  "OS Probability", 80, 0.95, 0.75, 0.55, "No", "Yes")
+
+# Display plot
+print(Cirrhosis_OS_plot)
+
+# Save plot
+png("/Users/sultanalharbi/Library/CloudStorage/OneDrive-Personal/Projects/Thesis_Chapters/Chapter 1 (cfDNA-TACE for HCC)/TACE_Results/Cirrhosis_OS_TACE.png", width = 10, height = 8, units = "in", res = 300)
+print(Cirrhosis_OS_plot)
+dev.off()
+```
+
+### [Progression-Free Survival by Cirrhosis]{style="color:#51366a; font-weight:bold;"}
+
+```{r PFS_Cirrhosis, echo=TRUE, cache=TRUE}
+# PFS Analysis by Cirrhosis
+Cirrhosis_PFS <- survfit(Surv(PFS_Time, PFS_Status) ~ Cirrhosis, data = Survival_R)
+median_pfs <- surv_median(Cirrhosis_PFS)
+
+Cirrhosis_PFS_plot <- create_survival_plot_binary(Cirrhosis_PFS, "Cirrhosis", "Cirrhosis", median_pfs, "PFS_Time", "PFS_Status", 
+                                   "PFS Probability", 40, 0.97, 0.77, 0.57, "No", "Yes")
+
+# Display plot
+print(Cirrhosis_PFS_plot)
+
+# Save plot
+png("/Users/sultanalharbi/Library/CloudStorage/OneDrive-Personal/Projects/Thesis_Chapters/Chapter 1 (cfDNA-TACE for HCC)/TACE_Results/Cirrhosis_PFS_TACE.png", width = 10, height = 8, units = "in", res = 300)
+print(Cirrhosis_PFS_plot)
+dev.off()
+```
+
+## [Viral vs. Non Viral Analysis]{style="color:#765543; font-weight:bold;"} {.tabset}
+
+### [Overall Survival by Viral vs. Non Viral]{style="color:#51366a; font-weight:bold;"}
+
+```{r OS_Viral, echo=TRUE, cache=TRUE}
+# OS Analysis by Viral vs. Non-Viral
+Viral_OS <- survfit(Surv(OS_Time, OS_Status) ~ Viral, data = Survival_R)
+median_os <- surv_median(Viral_OS)
+
+Viral_OS_plot <- create_survival_plot_binary(Viral_OS, "Viral", "Viral", median_os, "OS_Time", "OS_Status", 
+                                  "OS Probability", 80, 0.95, 0.75, 0.55, "Non-Viral", "Viral")
+
+# Display plot
+print(Viral_OS_plot)
+
+# Save plot
+png("/Users/sultanalharbi/Library/CloudStorage/OneDrive-Personal/Projects/Thesis_Chapters/Chapter 1 (cfDNA-TACE for HCC)/TACE_Results/Viral_OS_TACE.png", width = 10, height = 8, units = "in", res = 300)
+print(Viral_OS_plot)
+dev.off()
+```
+
+### [Progression-Free Survival by Viral vs. Non Viral]{style="color:#51366a; font-weight:bold;"}
+
+```{r PFS_Viral, echo=TRUE, cache=TRUE}
+# PFS Analysis by Viral vs. Non Viral
+Viral_PFS <- survfit(Surv(PFS_Time, PFS_Status) ~ Viral, data = Survival_R)
+median_pfs <- surv_median(Viral_PFS)
+
+Viral_PFS_plot <- create_survival_plot_binary(Viral_PFS, "Viral Status", "Viral", median_pfs, "PFS_Time", "PFS_Status", 
+                                   "PFS Probability", 40, 0.97, 0.77, 0.57, "Non-Viral", "Viral")
+
+# Display plot
+print(Viral_PFS_plot)
+
+# Save plot
+png("/Users/sultanalharbi/Library/CloudStorage/OneDrive-Personal/Projects/Thesis_Chapters/Chapter 1 (cfDNA-TACE for HCC)/TACE_Results/Viral_PFS_TACE.png", width = 10, height = 8, units = "in", res = 300)
+print(Viral_PFS_plot)
+dev.off()
+```
+
+## [Aetiology Analysis]{style="color:#765543; font-weight:bold;"} {.tabset}
+
+### [Overall Survival by Aetiology]{style="color:#51366a; font-weight:bold;"}
+
+```{r OS_Aetiology, echo=TRUE, cache=TRUE}
+# OS Analysis by Aetiology
+#Aetiology_OS <- survfit(Surv(OS_Time, OS_Status) ~ Aetiology, data = Survival_R)
+#median_os <- surv_median(Aetiology_OS)
+
+#Aetiology_OS_plot <- create_survival_plot(Aetiology_OS, "Aetiology", "Aetiology", median_os, "OS_Time", "OS_Status", 
+#                                   "OS Probability", 80, 0.95, 0.75, 0.55, 0.35)
+
+# Display plot
+#print(Aetiology_OS_plot)
+
+# Save plot
+#png("Aetiology_OS_TACE.png", width = 10, height = 8, units = "in", res = 300)
+#print(Aetiology_OS_plot)
+#dev.off()
+```
+
+### [Progression-Free Survival by Aetiology]{style="color:#51366a; font-weight:bold;"}
+
+```{r PFS_Aetiology, echo=TRUE, cache=TRUE}
+# PFS Analysis by Aetiology
+#Aetiology_PFS <- survfit(Surv(PFS_Time, PFS_Status) ~ Aetiology, data = Survival_R)
+#median_pfs <- surv_median(Aetiology_PFS)
+
+#Aetiology_PFS_plot <- create_survival_plot(Aetiology_PFS, "Aetiology", "Aetiology", median_pfs, "PFS_Time", "PFS_Status", 
+#                                    "PFS Probability", 40, 0.97, 0.77, 0.57, 0.40)
+
+# Display plot
+#print(Aetiology_PFS_plot)
+
+# Save plot
+#png("Aetiology_PFS_TACE.png", width = 10, height = 8, units = "in", res = 300)
+#print(Aetiology_PFS_plot)
+#dev.off()
+```
+
+## [Tumour size Analysis]{style="color:#765543; font-weight:bold;"} {.tabset}
+
+### [Overall Survival by Tumour size]{style="color:#51366a; font-weight:bold;"}
+
+```{r OS_Tumour, echo=TRUE, cache=TRUE}
+# OS Analysis by Tumor Size
+Tumour_OS <- survfit(Surv(OS_Time, OS_Status) ~ Tumour_size, data = Survival_R)
+median_os <- surv_median(Tumour_OS)
+
+Tumour_OS_plot <- create_survival_plot_binary(Tumour_OS, "Tumour Size", "Tumour_size", median_os, "OS_Time", "OS_Status", 
+                                  "OS Probability", 80, 0.95, 0.75, 0.55, "<5 cm", "≥5 cm")
+
+# Display plot
+print(Tumour_OS_plot)
+
+# Save plot
+png("/Users/sultanalharbi/Library/CloudStorage/OneDrive-Personal/Projects/Thesis_Chapters/Chapter 1 (cfDNA-TACE for HCC)/TACE_Results/Tumour_OS_TACE.png", width = 10, height = 8, units = "in", res = 300)
+print(Tumour_OS_plot)
+dev.off()
+```
+
+### [Progression-Free Survival by Tumour size]{style="color:#51366a; font-weight:bold;"}
+
+```{r PFS_Tumour, echo=TRUE, cache=TRUE}
+# PFS Analysis by Tumor Size
+Tumour_PFS <- survfit(Surv(PFS_Time, PFS_Status) ~ Tumour_size, data = Survival_R)
+median_pfs <- surv_median(Tumour_PFS)
+
+Tumour_PFS_plot <- create_survival_plot_binary(Tumour_PFS, "Tumor Size", "Tumour_size", median_pfs, "PFS_Time", "PFS_Status", 
+                                   "PFS Probability", 40, 0.97, 0.77, 0.57, "<5 cm", "≥5 cm")
+
+# Display plot
+print(Tumour_PFS_plot)
+
+# Save plot
+png("/Users/sultanalharbi/Library/CloudStorage/OneDrive-Personal/Projects/Thesis_Chapters/Chapter 1 (cfDNA-TACE for HCC)/TACE_Results/Tumour_PFS_TACE.png", width = 10, height = 8, units = "in", res = 300)
+print(Tumour_PFS_plot)
+dev.off()
+```
+
+## [AFP Analysis]{style="color:#765543; font-weight:bold;"} {.tabset}
+
+### [Overall Survival by AFP]{style="color:#51366a; font-weight:bold;"}
+
+```{r OS_AFP, echo=TRUE, cache=TRUE}
+# OS Analysis by AFP
+AFP_OS <- survfit(Surv(OS_Time, OS_Status) ~ AFP_binary, data = Survival_R)
+median_os <- surv_median(AFP_OS)
+
+AFP_OS_plot <- create_survival_plot_binary(AFP_OS, "AFP", "AFP_binary", median_os, "OS_Time", "OS_Status", 
+                                  "OS Probability", 80, 0.95, 0.75, 0.55, "<400 ng/mL", "≥400 ng/mL")
+
+# Display plot
+print(AFP_OS_plot)
+
+# Save plot
+png("/Users/sultanalharbi/Library/CloudStorage/OneDrive-Personal/Projects/Thesis_Chapters/Chapter 1 (cfDNA-TACE for HCC)/TACE_Results/AFP_OS_TACE.png", width = 10, height = 8, units = "in", res = 300)
+print(AFP_OS_plot)
+dev.off()
+```
+
+### [Progression-Free Survival by AFP]{style="color:#51366a; font-weight:bold;"}
+
+```{r PFS_AFP, echo=TRUE, cache=TRUE}
+# PFS Analysis by AFP
+AFP_PFS <- survfit(Surv(PFS_Time, PFS_Status) ~ AFP_binary, data = Survival_R)
+median_pfs <- surv_median(AFP_PFS)
+
+AFP_PFS_plot <- create_survival_plot_binary(AFP_PFS, "AFP", "AFP_binary", median_pfs, "PFS_Time", "PFS_Status", 
+                                   "PFS Probability", 40, 0.97, 0.77, 0.57, "<400 ng/mL", "≥400 ng/mL")
+
+# Display plot
+print(AFP_PFS_plot)
+
+# Save plot
+png("/Users/sultanalharbi/Library/CloudStorage/OneDrive-Personal/Projects/Thesis_Chapters/Chapter 1 (cfDNA-TACE for HCC)/TACE_Results/AFP_PFS_TACE.png", width = 10, height = 8, units = "in", res = 300)
+print(AFP_PFS_plot)
+dev.off()
+```
+
+## [Albumin Analysis]{style="color:#765543; font-weight:bold;"} {.tabset}
+
+### [Overall Survival by Albumin]{style="color:#51366a; font-weight:bold;"}
+
+```{r OS_Albumin, echo=TRUE, cache=TRUE}
+# OS Analysis by Albumin
+Albumin_OS <- survfit(Surv(OS_Time, OS_Status) ~ Albumin_binary, data = Survival_R)
+median_os <- surv_median(Albumin_OS)
+
+Albumin_OS_plot <- create_survival_plot_binary(Albumin_OS, "Albumin", "Albumin_binary", median_os, "OS_Time", "OS_Status", 
+                                  "OS Probability", 80, 0.95, 0.75, 0.55, "<36 g/L", "≥36 g/L")
+
+# Display plot
+print(Albumin_OS_plot)
+
+# Save plot
+png("/Users/sultanalharbi/Library/CloudStorage/OneDrive-Personal/Projects/Thesis_Chapters/Chapter 1 (cfDNA-TACE for HCC)/TACE_Results/Albumin_OS_TACE.png", width = 10, height = 8, units = "in", res = 300)
+print(Albumin_OS_plot)
+dev.off()
+```
+
+### [Progression-Free Survival by Albumin]{style="color:#51366a; font-weight:bold;"}
+
+```{r PFS_Albumin, echo=TRUE, cache=TRUE}
+# PFS Analysis by Albumin
+Albumin_PFS <- survfit(Surv(PFS_Time, PFS_Status) ~ Albumin_binary, data = Survival_R)
+median_pfs <- surv_median(Albumin_PFS)
+
+Albumin_PFS_plot <- create_survival_plot_binary(Albumin_PFS, "Albumin", "Albumin_binary", median_pfs, "PFS_Time", "PFS_Status", 
+                                   "PFS Probability", 40, 0.97, 0.77, 0.57, "<36 g/L", "≥36 g/L")
+
+# Display plot
+print(Albumin_PFS_plot)
+
+# Save plot
+png("/Users/sultanalharbi/Library/CloudStorage/OneDrive-Personal/Projects/Thesis_Chapters/Chapter 1 (cfDNA-TACE for HCC)/TACE_Results/Albumin_PFS_TACE.png", width = 10, height = 8, units = "in", res = 300)
+print(Albumin_PFS_plot)
+dev.off()
+```
+
+## [Bilirubin Analysis]{style="color:#765543; font-weight:bold;"} {.tabset}
+
+### [Overall Survival by Bilirubin]{style="color:#51366a; font-weight:bold;"}
+
+```{r OS_Bilirubin, echo=TRUE, cache=TRUE}
+# OS Analysis by Bilirubin
+Bilirubin_OS <- survfit(Surv(OS_Time, OS_Status) ~ Bilirubin_binary, data = Survival_R)
+median_os <- surv_median(Bilirubin_OS)
+
+Bilirubin_OS_plot <- create_survival_plot_binary(Bilirubin_OS, "Bilirubin", "Bilirubin_binary", median_os, "OS_Time", "OS_Status", 
+                                  "OS Probability", 80, 0.95, 0.75, 0.55, "<11 μmol/L", "≥11 μmol/L")
+
+# Display plot
+print(Bilirubin_OS_plot)
+
+# Save plot
+png("/Users/sultanalharbi/Library/CloudStorage/OneDrive-Personal/Projects/Thesis_Chapters/Chapter 1 (cfDNA-TACE for HCC)/TACE_Results/Bilirubin_OS_TACE.png", width = 10, height = 8, units = "in", res = 300)
+print(Bilirubin_OS_plot)
+dev.off()
+```
+
+### [Progression-Free Survival by Bilirubin]{style="color:#51366a; font-weight:bold;"}
+
+```{r PFS_Bilirubin, echo=TRUE, cache=TRUE}
+# PFS Analysis by Bilirubin
+Bilirubin_PFS <- survfit(Surv(PFS_Time, PFS_Status) ~ Bilirubin_binary, data = Survival_R)
+median_pfs <- surv_median(Bilirubin_PFS)
+
+Bilirubin_PFS_plot <- create_survival_plot_binary(Bilirubin_PFS, "Bilirubin", "Bilirubin_binary", median_pfs, "PFS_Time", "PFS_Status", 
+                                   "PFS Probability", 40, 0.97, 0.77, 0.57, "<11 μmol/L", "≥11 μmol/L")
+
+# Display plot
+print(Bilirubin_PFS_plot)
+
+# Save plot
+png("/Users/sultanalharbi/Library/CloudStorage/OneDrive-Personal/Projects/Thesis_Chapters/Chapter 1 (cfDNA-TACE for HCC)/TACE_Results/Bilirubin_PFS_TACE.png", width = 10, height = 8, units = "in", res = 300)
+print(Bilirubin_PFS_plot)
+dev.off()
+```
+
+## [TACE response Analysis]{style="color:#765543; font-weight:bold;"} {.tabset}
+
+### [Overall Survival by TACE response]{style="color:#51366a; font-weight:bold;"}
+
+```{r OS_TACE_Response, echo=TRUE, cache=TRUE}
+# OS Analysis by Treatment Response
+Response_OS <- survfit(Surv(OS_Time, OS_Status) ~ Response, data = Survival_R)
+median_os <- surv_median(Response_OS)
+
+Response_OS_plot <- create_survival_plot_binary(Response_OS, "Treatment Response", "Response", median_os, "OS_Time", "OS_Status", 
+                                  "OS Probability", 80, 0.95, 0.75, 0.55, "No Response", "Response")
+
+# Display plot
+print(Response_OS_plot)
+
+# Save plot
+png("/Users/sultanalharbi/Library/CloudStorage/OneDrive-Personal/Projects/Thesis_Chapters/Chapter 1 (cfDNA-TACE for HCC)/TACE_Results/Response_OS_TACE.png", width = 10, height = 8, units = "in", res = 300)
+print(Response_OS_plot)
+dev.off()
+```
+
+### [Progression-Free Survival by TACE response]{style="color:#51366a; font-weight:bold;"}
+
+```{r PFS_TACE_Response, echo=TRUE, cache=TRUE}
+# PFS Analysis by Treatment Response
+Response_PFS <- survfit(Surv(PFS_Time, PFS_Status) ~ Response, data = Survival_R)
+median_pfs <- surv_median(Response_PFS)
+
+Response_PFS_plot <- create_survival_plot_binary(Response_PFS, "Treatment Response", "Response", median_pfs, "PFS_Time", "PFS_Status", 
+                                   "PFS Probability", 40, 0.97, 0.77, 0.57, "No Response", "Response")
+
+# Display plot
+print(Response_PFS_plot)
+
+# Save plot
+png("/Users/sultanalharbi/Library/CloudStorage/OneDrive-Personal/Projects/Thesis_Chapters/Chapter 1 (cfDNA-TACE for HCC)/TACE_Results/Response_PFS_TACE.png", width = 10, height = 8, units = "in", res = 300)
+print(Response_PFS_plot)
+dev.off()
+```
+
+## [Age Analysis]{style="color:#765543; font-weight:bold;"} {.tabset}
+
+### [Overall Survival by Age]{style="color:#51366a; font-weight:bold;"}
+
+```{r OS_Age, echo=TRUE, cache=TRUE}
+# OS Analysis by Age
+Age_OS <- survfit(Surv(OS_Time, OS_Status) ~ Age_binary, data = Survival_R)
+median_os <- surv_median(Age_OS)
+
+Age_OS_plot <- create_survival_plot_binary(Age_OS, "Age", "Age_binary", median_os, "OS_Time", "OS_Status", 
+                                  "OS Probability", 80, 0.95, 0.75, 0.55, "<69 years", "≥69 years")
+
+# Display plot
+print(Age_OS_plot)
+
+# Save plot
+png("/Users/sultanalharbi/Library/CloudStorage/OneDrive-Personal/Projects/Thesis_Chapters/Chapter 1 (cfDNA-TACE for HCC)/TACE_Results/Age_OS_TACE.png", width = 10, height = 8, units = "in", res = 300)
+print(Age_OS_plot)
+dev.off()
+```
+
+### [Progression-Free Survival by Age]{style="color:#51366a; font-weight:bold;"}
+
+```{r PFS_Age, echo=TRUE, cache=TRUE}
+# PFS Analysis by Age
+Age_PFS <- survfit(Surv(PFS_Time, PFS_Status) ~ Age_binary, data = Survival_R)
+median_pfs <- surv_median(Age_PFS)
+
+Age_PFS_plot <- create_survival_plot_binary(Age_PFS, "Age", "Age_binary", median_pfs, "PFS_Time", "PFS_Status", 
+                                   "PFS Probability", 40, 0.97, 0.77, 0.57, "<69 years", "≥69 years")
+
+# Display plot
+print(Age_PFS_plot)
+
+# Save plot
+png("/Users/sultanalharbi/Library/CloudStorage/OneDrive-Personal/Projects/Thesis_Chapters/Chapter 1 (cfDNA-TACE for HCC)/TACE_Results/Age_PFS_TACE.png", width = 10, height = 8, units = "in", res = 300)
+print(Age_PFS_plot)
+dev.off()
+```
+
+## [PVT Analysis]{style="color:#765543; font-weight:bold;"} {.tabset}
+
+### [Overall Survival by PVT]{style="color:#51366a; font-weight:bold;"}
+
+```{r OS_PVT, echo=TRUE, cache=TRUE}
+# OS Analysis by PVT
+PVT_OS <- survfit(Surv(OS_Time, OS_Status) ~ PVT, data = Survival_R)
+median_os <- surv_median(PVT_OS)
+
+PVT_OS_plot <- create_survival_plot_binary(PVT_OS, "PVT", "PVT", median_os, "OS_Time", "OS_Status", 
+                                  "OS Probability", 80, 0.95, 0.75, 0.55, "No", "Yes")
+
+# Display plot
+print(PVT_OS_plot)
+
+# Save plot
+png("/Users/sultanalharbi/Library/CloudStorage/OneDrive-Personal/Projects/Thesis_Chapters/Chapter 1 (cfDNA-TACE for HCC)/TACE_Results/PVT_OS_TACE.png", width = 10, height = 8, units = "in", res = 300)
+print(PVT_OS_plot)
+dev.off()
+```
+
+### [Progression-Free Survival by PVT]{style="color:#51366a; font-weight:bold;"}
+
+```{r PFS_PVT, echo=TRUE, cache=TRUE}
+# PFS Analysis by PVT
+PVT_PFS <- survfit(Surv(PFS_Time, PFS_Status) ~ PVT, data = Survival_R)
+median_pfs <- surv_median(PVT_PFS)
+
+PVT_PFS_plot <- create_survival_plot_binary(PVT_PFS, "Portal Vein Thrombosis", "PVT", median_pfs, "PFS_Time", "PFS_Status", 
+                                   "PFS Probability", 40, 0.97, 0.77, 0.57, "No", "Yes")
+
+# Display plot
+print(PVT_PFS_plot)
+
+# Save plot
+png("/Users/sultanalharbi/Library/CloudStorage/OneDrive-Personal/Projects/Thesis_Chapters/Chapter 1 (cfDNA-TACE for HCC)/TACE_Results/PVT_PFS_TACE.png", width = 10, height = 8, units = "in", res = 300)
+print(PVT_PFS_plot)
+dev.off()
+```
+
+## [cfDNA level Analysis]{style="color:#765543; font-weight:bold;"} {.tabset}
+
+### [Overall Survival by cfDNA level]{style="color:#51366a; font-weight:bold;"}
+
+```{r OS_cfDNA, echo=TRUE, cache=TRUE}
+# OS Analysis by cfDNA level
+cfDNA_OS <- survfit(Surv(OS_Time, OS_Status) ~ cfDNA, data = Survival_R)
+median_os <- surv_median(cfDNA_OS)
+
+cfDNA_OS_plot <- create_survival_plot_binary(cfDNA_OS, "cfDNA Level", "cfDNA", median_os, "OS_Time", "OS_Status", 
+                                  "OS Probability", 80, 0.95, 0.75, 0.55, "<544 ng/mL", "≥544 ng/mL")
+
+# Display plot
+print(cfDNA_OS_plot)
+
+# Save plot
+png("/Users/sultanalharbi/Library/CloudStorage/OneDrive-Personal/Projects/Thesis_Chapters/Chapter 1 (cfDNA-TACE for HCC)/TACE_Results/cfDNA_OS_TACE.png", width = 10, height = 8, units = "in", res = 300)
+print(cfDNA_OS_plot)
+dev.off()
+```
+
+### [Progression-Free Survival by cfDNA level]{style="color:#51366a; font-weight:bold;"}
+
+```{r PFS_cfDNA, echo=TRUE, cache=TRUE}
+# PFS Analysis by cfDNA level
+cfDNA_PFS <- survfit(Surv(PFS_Time, PFS_Status) ~ cfDNA, data = Survival_R)
+median_pfs <- surv_median(cfDNA_PFS)
+
+cfDNA_PFS_plot <- create_survival_plot_binary(cfDNA_PFS, "cfDNA Level", "cfDNA", median_pfs, "PFS_Time", "PFS_Status", 
+                                   "PFS Probability", 40, 0.97, 0.77, 0.57, "<544 ng/mL", "≥544 ng/mL")
+
+# Display plot
+print(cfDNA_PFS_plot)
+
+# Save plot
+png("/Users/sultanalharbi/Library/CloudStorage/OneDrive-Personal/Projects/Thesis_Chapters/Chapter 1 (cfDNA-TACE for HCC)/TACE_Results/cfDNA_PFS_TACE.png", width = 10, height = 8, units = "in", res = 300)
+print(cfDNA_PFS_plot)
+dev.off()
+```
+
+# [) 📈 Cox Regression Survival Results]{style="color:#000000; font-weight:bold;"} {.tabset .tabset-fade .tabset-pills}
+
+## [Univariate Analysis]{style="color:#765543; font-weight:bold;"} {.tabset}
+
+### [AFP Analysis]{style="color:#51366a; font-weight:bold;"}
+
+```{r OS_PFS_Cox_AFP, echo=TRUE, cache=TRUE}
+# Convert AFP_binary to factor
+Survival_R$AFP_binary <- factor(Survival_R$AFP_binary, levels = c(0, 1), labels = c("low", "high"))
+
+# Fit the Cox proportional hazards model for Overall Survival (OS)
+(cox_model_OS_AFP <- coxph(Surv(OS_Time, OS_Status) ~ AFP_binary, data = Survival_R) %>%
+  tbl_regression(exp = TRUE) %>%
+  modify_header(label = "Effect of AFP (ng/mL) level > 400 'high' versus ≤ 400 'low' on OS"))
+
+# Fit the Cox proportional hazards model for Progression-Free Survival (PFS)
+(cox_model_PFS_AFP <- coxph(Surv(PFS_Time, PFS_Status) ~ AFP_binary, data = Survival_R) %>%
+  tbl_regression(exp = TRUE) %>%
+  modify_header(label = "Effect of AFP (ng/mL) level > 400 'high' versus ≤ 400 'low' on PFS"))
+```
+
+### [Albumin Analysis]{style="color:#51366a; font-weight:bold;"}
+
+```{r OS_PFS_Cox_Albumin, echo=TRUE, cache=TRUE}
+# Convert Albumin_binary to factor
+Survival_R$Albumin_binary <- factor(Survival_R$Albumin_binary, levels = c(0, 1), labels = c("low", "normal"))
+
+# Fit the Cox proportional hazards model for Overall Survival (OS)
+(cox_model_OS_Albumin <- coxph(Surv(OS_Time, OS_Status) ~ Albumin_binary, data = Survival_R) %>%
+  tbl_regression(exp = TRUE) %>%
+  modify_header(label = "Effect of Albumin (g/L) level < 36 'low' versus ≥ 36 'normal' on OS"))
+
+# Fit the Cox proportional hazards model for Progression-Free Survival (PFS)
+(cox_model_PFS_Albumin <- coxph(Surv(PFS_Time, PFS_Status) ~ Albumin_binary, data = Survival_R) %>%
+  tbl_regression(exp = TRUE) %>%
+  modify_header(label = "Effect of Albumin (g/L) level < 36 'low' versus ≥ 36 'normal' on PFS"))
+```
+
+### [Bilirubin Analysis]{style="color:#51366a; font-weight:bold;"}
+
+```{r OS_PFS_Cox_Bilirubin, echo=TRUE, cache=TRUE}
+# Convert Bilirubin_binary to factor
+Survival_R$Bilirubin_binary <- factor(Survival_R$Bilirubin_binary, levels = c(0, 1), labels = c("normal", "elevated"))
+
+# Fit the Cox proportional hazards model for Overall Survival (OS)
+(cox_model_OS_Bilirubin <- coxph(Surv(OS_Time, OS_Status) ~ Bilirubin_binary, data = Survival_R) %>%
+  tbl_regression(exp = TRUE) %>%
+  modify_header(label = "Effect of Bilirubin (μmol/L) level < 11 'normal' versus ≥ 11 'elevated' on OS"))
+
+# Fit the Cox proportional hazards model for Progression-Free Survival (PFS)
+(cox_model_PFS_Bilirubin <- coxph(Surv(PFS_Time, PFS_Status) ~ Bilirubin_binary, data = Survival_R) %>%
+  tbl_regression(exp = TRUE) %>%
+  modify_header(label = "Effect of Bilirubin (μmol/L) level < 11 'normal' versus ≥ 11 'elevated' on PFS"))
+```
+
+### [Age Analysis]{style="color:#51366a; font-weight:bold;"}
+
+```{r OS_PFS_Cox_Age, echo=TRUE, cache=TRUE}
+# Convert Age_binary to factor
+Survival_R$Age_binary <- factor(Survival_R$Age_binary, levels = c(0, 1), labels = c("younger", "older"))
+
+# Fit the Cox proportional hazards model for Overall Survival (OS)
+(cox_model_OS_Age <- coxph(Surv(OS_Time, OS_Status) ~ Age_binary, data = Survival_R) %>%
+  tbl_regression(exp = TRUE) %>%
+  modify_header(label = "Effect of Age < 69 'younger' versus ≥ 69 'older' on OS"))
+
+# Fit the Cox proportional hazards model for Progression-Free Survival (PFS)
+(cox_model_PFS_Age <- coxph(Surv(PFS_Time, PFS_Status) ~ Age_binary, data = Survival_R) %>%
+  tbl_regression(exp = TRUE) %>%
+  modify_header(label = "Effect of Age < 69 'younger' versus ≥ 69 'older' on PFS"))
+```
+
+### [Performance Status Analysis]{style="color:#51366a; font-weight:bold;"}
+
+```{r OS_PFS_Cox_PS, echo=TRUE, cache=TRUE}
+# Convert PS to factor
+Survival_R$PS <- factor(Survival_R$PS, levels = c(0, 1), labels = c("PS0", "PS1"))
+
+# Fit the Cox proportional hazards model for Overall Survival (OS)
+(cox_model_OS_PS <- coxph(Surv(OS_Time, OS_Status) ~ PS, data = Survival_R) %>%
+  tbl_regression(exp = TRUE) %>%
+  modify_header(label = "Effect of Performance Status: PS0 versus PS1 on OS"))
+
+# Fit the Cox proportional hazards model for Progression-Free Survival (PFS)
+(cox_model_PFS_PS <- coxph(Surv(PFS_Time, PFS_Status) ~ PS, data = Survival_R) %>%
+  tbl_regression(exp = TRUE) %>%
+  modify_header(label = "Effect of Performance Status: PS0 versus PS1 on PFS"))
+```
+
+### [Cirrhosis Analysis]{style="color:#51366a; font-weight:bold;"}
+
+```{r OS_PFS_Cox_Cirrhosis, echo=TRUE, cache=TRUE}
+# Convert Cirrhosis to factor
+Survival_R$Cirrhosis <- factor(Survival_R$Cirrhosis, levels = c(0, 1), labels = c("No", "Yes"))
+
+# Fit the Cox proportional hazards model for Overall Survival (OS)
+(cox_model_OS_Cirrhosis <- coxph(Surv(OS_Time, OS_Status) ~ Cirrhosis, data = Survival_R) %>%
+  tbl_regression(exp = TRUE) %>%
+  modify_header(label = "Effect of Cirrhosis: No versus Yes on OS"))
+
+# Fit the Cox proportional hazards model for Progression-Free Survival (PFS)
+(cox_model_PFS_Cirrhosis <- coxph(Surv(PFS_Time, PFS_Status) ~ Cirrhosis, data = Survival_R) %>%
+  tbl_regression(exp = TRUE) %>%
+  modify_header(label = "Effect of Cirrhosis: No versus Yes on PFS"))
+```
+
+### [Portal Vein Thrombosis Analysis]{style="color:#51366a; font-weight:bold;"}
+
+```{r OS_PFS_Cox_PVT, echo=TRUE, cache=TRUE}
+# Convert PVT to factor
+Survival_R$PVT <- factor(Survival_R$PVT, levels = c(0, 1), labels = c("No", "Yes"))
+
+# Fit the Cox proportional hazards model for Overall Survival (OS)
+(cox_model_OS_PVT <- coxph(Surv(OS_Time, OS_Status) ~ PVT, data = Survival_R) %>%
+  tbl_regression(exp = TRUE) %>%
+  modify_header(label = "Effect of Portal Vein Thrombosis: No versus Yes on OS"))
+
+# Fit the Cox proportional hazards model for Progression-Free Survival (PFS)
+(cox_model_PFS_PVT <- coxph(Surv(PFS_Time, PFS_Status) ~ PVT, data = Survival_R) %>%
+  tbl_regression(exp = TRUE) %>%
+  modify_header(label = "Effect of Portal Vein Thrombosis: No versus Yes on PFS"))
+```
+
+### [Tumor Size Analysis]{style="color:#51366a; font-weight:bold;"}
+
+```{r OS_PFS_Cox_Tumour, echo=TRUE, cache=TRUE}
+# Convert Tumour_size to factor
+Survival_R$Tumour_size <- factor(Survival_R$Tumour_size, levels = c(0, 1), labels = c("small", "large"))
+
+# Fit the Cox proportional hazards model for Overall Survival (OS)
+(cox_model_OS_Tumour <- coxph(Surv(OS_Time, OS_Status) ~ Tumour_size, data = Survival_R) %>%
+  tbl_regression(exp = TRUE) %>%
+  modify_header(label = "Effect of Tumor Size: < 5 cm 'small' versus ≥ 5 cm 'large' on OS"))
+
+# Fit the Cox proportional hazards model for Progression-Free Survival (PFS)
+(cox_model_PFS_Tumour <- coxph(Surv(PFS_Time, PFS_Status) ~ Tumour_size, data = Survival_R) %>%
+  tbl_regression(exp = TRUE) %>%
+  modify_header(label = "Effect of Tumor Size: < 5 cm 'small' versus ≥ 5 cm 'large' on PFS"))
+```
+
+### [Viral Status Analysis]{style="color:#51366a; font-weight:bold;"}
+
+```{r OS_PFS_Cox_Viral, echo=TRUE, cache=TRUE}
+# Convert Viral to factor
+Survival_R$Viral <- factor(Survival_R$Viral, levels = c(0, 1), labels = c("Non-Viral", "Viral"))
+
+# Fit the Cox proportional hazards model for Overall Survival (OS)
+(cox_model_OS_Viral <- coxph(Surv(OS_Time, OS_Status) ~ Viral, data = Survival_R) %>%
+  tbl_regression(exp = TRUE) %>%
+  modify_header(label = "Effect of Viral Status: Non-Viral versus Viral on OS"))
+
+# Fit the Cox proportional hazards model for Progression-Free Survival (PFS)
+(cox_model_PFS_Viral <- coxph(Surv(PFS_Time, PFS_Status) ~ Viral, data = Survival_R) %>%
+  tbl_regression(exp = TRUE) %>%
+  modify_header(label = "Effect of Viral Status: Non-Viral versus Viral on PFS"))
+```
+
+### [Treatment Response Analysis]{style="color:#51366a; font-weight:bold;"}
+
+```{r OS_PFS_Cox_Response, echo=TRUE, cache=TRUE}
+# Convert Response to factor (not Response_Code)
+Survival_R$Response <- factor(Survival_R$Response, levels = c(0, 1), labels = c("No Response", "Response"))
+
+# Fit the Cox proportional hazards model for Overall Survival (OS) using Response
+cox_model_OS_Response <- coxph(Surv(OS_Time, OS_Status) ~ Response, data = Survival_R)
+summary(cox_model_OS_Response)
+
+# Fit the Cox proportional hazards model for Progression-Free Survival (PFS) using Response
+cox_model_PFS_Response <- coxph(Surv(PFS_Time, PFS_Status) ~ Response, data = Survival_R)
+summary(cox_model_PFS_Response)
+```
+
+### [CTP Class Analysis]{style="color:#51366a; font-weight:bold;"}
+
+```{r OS_PFS_Cox_CTP, echo=TRUE, cache=TRUE}
+# Convert CTP to factor
+Survival_R$CTP <- factor(Survival_R$CTP, levels = c("A", "B"))
+
+# Fit the Cox proportional hazards model for Overall Survival (OS)
+(cox_model_OS_CTP <- coxph(Surv(OS_Time, OS_Status) ~ CTP, data = Survival_R) %>%
+  tbl_regression(exp = TRUE) %>%
+  modify_header(label = "Effect of Child-Turcotte-Pugh Class: A versus B on OS"))
+
+# Fit the Cox proportional hazards model for Progression-Free Survival (PFS)
+(cox_model_PFS_CTP <- coxph(Surv(PFS_Time, PFS_Status) ~ CTP, data = Survival_R) %>%
+  tbl_regression(exp = TRUE) %>%
+  modify_header(label = "Effect of Child-Turcotte-Pugh Class: A versus B on PFS"))
+```
+
+### [BCLC Stage Analysis]{style="color:#51366a; font-weight:bold;"}
+
+```{r OS_PFS_Cox_BCLC, echo=TRUE, cache=TRUE}
+# Convert BCLC to factor
+Survival_R$BCLC <- factor(Survival_R$BCLC, levels = c("A", "B", "C"))
+
+# Fit the Cox proportional hazards model for Overall Survival (OS)
+(cox_model_OS_BCLC <- coxph(Surv(OS_Time, OS_Status) ~ BCLC, data = Survival_R) %>%
+  tbl_regression(exp = TRUE) %>%
+  modify_header(label = "Effect of Barcelona Clinic Liver Cancer Stage on OS"))
+
+# Fit the Cox proportional hazards model for Progression-Free Survival (PFS)
+(cox_model_PFS_BCLC <- coxph(Surv(PFS_Time, PFS_Status) ~ BCLC, data = Survival_R) %>%
+  tbl_regression(exp = TRUE) %>%
+  modify_header(label = "Effect of Barcelona Clinic Liver Cancer Stage on PFS"))
+```
+
+### [HAP Score Analysis]{style="color:#51366a; font-weight:bold;"}
+
+```{r OS_PFS_Cox_HAP, echo=TRUE, cache=TRUE}
+# Convert HAP to factor
+Survival_R$HAP <- factor(Survival_R$HAP, levels = c("A", "B", "C", "D"))
+
+# Fit the Cox proportional hazards model for Overall Survival (OS)
+(cox_model_OS_HAP <- coxph(Surv(OS_Time, OS_Status) ~ HAP, data = Survival_R) %>%
+  tbl_regression(exp = TRUE) %>%
+  modify_header(label = "Effect of Hepatoma Arterial-embolization Prognostic Score on OS"))
+
+# Fit the Cox proportional hazards model for Progression-Free Survival (PFS)
+(cox_model_PFS_HAP <- coxph(Surv(PFS_Time, PFS_Status) ~ HAP, data = Survival_R) %>%
+  tbl_regression(exp = TRUE) %>%
+  modify_header(label = "Effect of Hepatoma Arterial-embolization Prognostic Score on PFS"))
+```
+
+### [cfDNA Level Analysis]{style="color:#51366a; font-weight:bold;"}
+
+```{r OS_PFS_Cox_cfDNA, echo=TRUE, cache=TRUE}
+# Convert cfDNA to factor
+Survival_R$cfDNA <- factor(Survival_R$cfDNA, levels = c(0, 1), labels = c("low", "high"))
+
+# Fit the Cox proportional hazards model for Overall Survival (OS)
+(cox_model_OS_cfDNA <- coxph(Surv(OS_Time, OS_Status) ~ cfDNA, data = Survival_R) %>%
+  tbl_regression(exp = TRUE) %>%
+  modify_header(label = "Effect of cfDNA Level: < 544 ng/mL 'low' versus ≥ 544 ng/mL 'high' on OS"))
+
+# Fit the Cox proportional hazards model for Progression-Free Survival (PFS)
+(cox_model_PFS_cfDNA <- coxph(Surv(PFS_Time, PFS_Status) ~ cfDNA, data = Survival_R) %>%
+  tbl_regression(exp = TRUE) %>%
+  modify_header(label = "Effect of cfDNA Level: < 544 ng/mL 'low' versus ≥ 544 ng/mL 'high' on PFS"))
+```
+
+## [Multivariate Analysis]{style="color:#765543; font-weight:bold;"} {.tabset}
+
+### [Multivariate Analysis for Overall Survival]{style="color:#51366a; font-weight:bold;"}
+
+```{r OS_Cox_Multivariate, echo=TRUE, cache=TRUE}
+# Fit multivariate Cox proportional hazards model for Overall Survival (OS)
+(cox_model_OS_multi <- coxph(Surv(OS_Time, OS_Status) ~ AFP_binary + Albumin_binary + Bilirubin_binary + 
+                             Age_binary + PS + Cirrhosis + PVT + Tumour_size + Viral + 
+                             Response_Code + CTP + BCLC + HAP + cfDNA, 
+                          data = Survival_R) %>%
+  tbl_regression(exp = TRUE) %>%
+  modify_header(label = "Multivariate Cox Regression for Overall Survival"))
+```
+
+### <span style="color:#51366a; font-weight:bold;">  Multivariate Analysis for Progression-Free Survival
+
+```{r PFS_Cox_Multivariate, echo=TRUE, cache=TRUE}
+# Fit multivariate Cox proportional hazards model for Progression-Free Survival (PFS)
+(cox_model_PFS_multi <- coxph(Surv(PFS_Time, PFS_Status) ~ AFP_binary + Albumin_binary + Bilirubin_binary + 
+                              Age_binary + PS + Cirrhosis + PVT + Tumour_size + Viral + 
+                              Response_Code + CTP + BCLC + HAP + cfDNA, 
+                           data = Survival_R) %>%
+  tbl_regression(exp = TRUE) %>%
+  modify_header(label = "Multivariate Cox Regression for Progression-Free Survival"))
+```
+
+### [Stepwise Model Selection]{style="color:#51366a; font-weight:bold;"}
+
+```{r Stepwise_Model, echo=TRUE, cache=TRUE}
+# Stepwise model selection for OS
+full_model_OS <- coxph(Surv(OS_Time, OS_Status) ~ AFP_binary + Albumin_binary + Bilirubin_binary + 
+                        Age_binary + PS + Cirrhosis + PVT + Tumour_size + Viral + 
+                        Response_Code + CTP + BCLC + HAP + cfDNA, 
+                     data = Survival_R)
+
+step_model_OS <- step(full_model_OS, direction = "both", trace = 0)
+(step_model_OS %>%
+  tbl_regression(exp = TRUE) %>%
+  modify_header(label = "Stepwise Selected Model for Overall Survival"))
+
+# Stepwise model selection for PFS
+full_model_PFS <- coxph(Surv(PFS_Time, PFS_Status) ~ AFP_binary + Albumin_binary + Bilirubin_binary + 
+                         Age_binary + PS + Cirrhosis + PVT + Tumour_size + Viral + 
+                         Response_Code + CTP + BCLC + HAP + cfDNA, 
+                      data = Survival_R)
+
+step_model_PFS <- step(full_model_PFS, direction = "both", trace = 0)
+(step_model_PFS %>%
+  tbl_regression(exp = TRUE) %>%
+  modify_header(label = "Stepwise Selected Model for Progression-Free Survival"))
+```
+
+```{r Stepwise_Model_pValue, echo=TRUE, cache=TRUE}
+# Stepwise model selection for OS
+full_model_OS_pValue <- coxph(Surv(OS_Time, OS_Status) ~ AFP_binary + BCLC + HAP + PVT + Tumour_size, 
+                     data = Survival_R)
+
+step_model_OS_pvalue <- step(full_model_OS_pValue, direction = "both", trace = 0)
+(step_model_OS_pvalue %>%
+  tbl_regression(exp = TRUE) %>%
+  modify_header(label = "Stepwise Selected Model for Overall Survival"))
+
+# Stepwise model selection for PFS
+full_model_PFS_pvalue <- coxph(Surv(PFS_Time, PFS_Status) ~ AFP_binary + BCLC + HAP + PVT + Tumour_size, 
+                      data = Survival_R)
+
+step_model_PFS_pvalue <- step(full_model_PFS_pvalue, direction = "both", trace = 0)
+(step_model_PFS_pvalue %>%
+  tbl_regression(exp = TRUE) %>%
+  modify_header(label = "Stepwise Selected Model for Progression-Free Survival"))
+```
+
+
+```{=html}
+<style>
+/* --- :root contains all our variables for easy management --- */
+:root {
+  /* Default Box Colors */
+  --box-bg-color: #f8f9fa;
+  --box-border-color: #dee2e6;
+  --box-text-color: #212529; /* Darker text for better contrast */
+  
+  /* Primary Theme */
+  --primary-bg: #eef2ff; /* Slightly darker for contrast */
+  --primary-border: #6a82fb;
+
+  /* Secondary Theme */
+  --secondary-bg: #e6f8ee;
+  --secondary-border: #4caf50;
+  
+  /* Info Theme */
+  --info-bg: #e4f4ff;
+  --info-border: #2196F3;
+  
+  /* Warning Theme */
+  --warning-bg: #fff8e1;
+  --warning-border: #ffc107;
+}
+
+/* --- General Box Styling (now uses variables) --- */
+.section-box {
+  background-color: var(--box-bg-color);
+  border-left-color: var(--box-border-color);
+  color: var(--box-text-color);
+  
+  padding: 1.25em;
+  margin-bottom: 20px;
+  border-radius: 8px;
+  border-left-width: 5px;
+  border-left-style: solid;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.08);
+  transition: all 0.3s ease-in-out;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  overflow: hidden;
+}
+
+.section-box:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.12);
+}
+
+/* --- Specific Box Themes (now just set variables) --- */
+.primary-box {
+  --box-bg-color: var(--primary-bg);
+  --box-border-color: var(--primary-border);
+}
+
+.secondary-box {
+  --box-bg-color: var(--secondary-bg);
+  --box-border-color: var(--secondary-border);
+}
+
+.info-box {
+  --box-bg-color: var(--info-bg);
+  --box-border-color: var(--info-border);
+}
+
+.warning-box {
+  --box-bg-color: var(--warning-bg);
+  --box-border-color: var(--warning-border);
+}
+</style>
+```
