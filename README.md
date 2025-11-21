@@ -1,4 +1,4 @@
-# 🎓 cfDNA Shallow WGS Copy Number Alterations and Fragmentomics as a Biomarker for Patients with Hepatocellular Carcinoma (HCC) 🎓
+# 🎓 Molecular Analysis of Cell-Free DNA (cfDNA) in Patients with Hepatocellular Carcinoma (HCC) 🎓
 
 ## Author: Sultan N. Alharbi
 
