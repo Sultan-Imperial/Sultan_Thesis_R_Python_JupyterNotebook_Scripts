@@ -5,7 +5,7 @@ PhD Candidate, Department of Surgery & Cancer
 **Imperial College London**  
 Supervisor: **Professor Rohini Sharma**
 
-[![ORCID](https://img.shields.io/badge/ORCID-0009-0001-5679-2129-brightgreen)](https://orcid.org/)  
+[![ORCID](https://img.shields.io/badge/ORCID-0009--0001--5679--2129-brightgreen)](https://orcid.org/0009-0001-5679-2129)  
 [![GitHub last commit](https://img.shields.io/github/last-commit/Sultan-Imperial/Sultan_Thesis_R_Python_JupyterNotebook_Scripts)](https://github.com/Sultan-Imperial/Sultan_Thesis_R_Python_JupyterNotebook_Scripts)  
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -18,6 +18,10 @@ This repository contains the complete set of **R Markdown files**, **Python scri
 My research focuses on discovering **non-invasive circulating cell-free DNA (cfDNA) biomarkers** to improve the **detection**, **monitoring**, and **prognosis** of **hepatocellular carcinoma (HCC)**.  
 The overarching aim of this thesis is to help patients with HCC live better and longer lives by harnessing the power of **liquid biopsy** and **real-time tumour genomics**.
 
+---
+
+## 💭 Abstract  
+*Insert your thesis abstract here.*
 
 ---
 
