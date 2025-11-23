@@ -5,7 +5,7 @@ PhD Candidate, Department of Surgery & Cancer
 **Imperial College London**  
 Supervisor: **Professor Rohini Sharma**
 
-[![ORCID](https://img.shields.io/badge/ORCID-0000--0000--0000--0000-brightgreen)](https://orcid.org/)  
+[![ORCID](https://img.shields.io/badge/ORCID-0009-0001-5679-2129-brightgreen)](https://orcid.org/)  
 [![GitHub last commit](https://img.shields.io/github/last-commit/Sultan-Imperial/Sultan_Thesis_R_Python_JupyterNotebook_Scripts)](https://github.com/Sultan-Imperial/Sultan_Thesis_R_Python_JupyterNotebook_Scripts)  
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
