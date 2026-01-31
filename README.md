@@ -2,8 +2,7 @@
 
 ## **Author: Sultan N. Alharbi**  
 PhD Candidate, Department of Surgery & Cancer  
-**Imperial College London**  
-Supervisor: **Professor Rohini Sharma**
+**Imperial College London**
 
 [![ORCID](https://img.shields.io/badge/ORCID-0009--0001--5679--2129-brightgreen)](https://orcid.org/0009-0001-5679-2129)  
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
