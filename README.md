@@ -7,7 +7,7 @@ PhD Candidate, Department of Surgery & Cancer
 [![ORCID](https://img.shields.io/badge/ORCID-0009--0001--5679--2129-brightgreen)](https://orcid.org/0009-0001-5679-2129)  
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-<img src="Results/InfoGraphic_results.png" alt="App screenshot" width="400">
+<img src="Results/InfoGraphic_results.png" alt="App screenshot" width="800">
 ---
 
 ## 🌟 Overview
