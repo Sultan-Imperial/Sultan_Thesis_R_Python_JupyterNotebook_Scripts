@@ -8,6 +8,7 @@ PhD Candidate, Department of Surgery & Cancer
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 <img src="Results/InfoGraphic_results.png" alt="App screenshot" width="800">
+<img src="Results/intro.png" alt="App screenshot" width="800">
 ---
 
 ## 🌟 Overview
